@@ -1,8 +1,8 @@
-name: Deploy to GitHub Pages
+name: Generate QuickStatements & Deploy to Pages
 
 on:
-  push:
-    branches: [master]
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly on Monday at 06:00 UTC
   workflow_dispatch:
 
 permissions:
@@ -20,12 +20,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install requests
+
+      - name: Generate QuickStatements from SPARQL
+        run: python generate_modern_shrine_ranking_qualifiers.py
+
       - name: Build site
         run: |
           mkdir -p _site
           cp modern_shrine_ranking_qualifiers.txt _site/
           REMAINING=$(wc -l < modern_shrine_ranking_qualifiers.txt | tr -d ' ')
-          GENERATED=$(git log -1 --format='%ci' -- modern_shrine_ranking_qualifiers.txt | cut -d' ' -f1,2)
+          GENERATED=$(date -u '+%Y-%m-%d %H:%M UTC')
           cat > _site/index.html << HTMLEOF
           <!DOCTYPE html>
           <html lang="en">
@@ -44,7 +53,7 @@ jobs:
             <h1>Modern Shrine Ranking Qualifiers</h1>
             <p>QuickStatements to add <code>P1027</code> (conferred by) &rarr; <code>Q712534</code> (modern system of ranked Shinto shrines) qualifier to all <code>P13723</code> (modern shrine ranking) statements.</p>
             <div class="stats">
-              <strong>${REMAINING} statements remaining</strong> &mdash; last updated ${GENERATED}
+              <strong>${REMAINING} statements remaining</strong> &mdash; generated ${GENERATED}
             </div>
             <p><a href="modern_shrine_ranking_qualifiers.txt">Download QuickStatements file</a></p>
             <p>Paste into <a href="https://quickstatements.toolforge.org/#/batch">QuickStatements</a> to apply.</p>
