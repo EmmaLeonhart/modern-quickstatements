@@ -58,14 +58,14 @@ def main():
         print("Nothing to do — all statements already have P1027 qualifier.")
         return
 
-    # Generate QuickStatements v1 format
-    # Format: QXXX\tP13723\tQYYY\tP1027\tQ712534
+    # Generate QuickStatements v1 format with pipe delimiters
+    # Format: QXXX|P13723|QYYY|P1027|Q712534
     output_file = "modern_shrine_ranking_qualifiers.txt"
     with open(output_file, "w", encoding="utf-8") as f:
         for r in results:
             item = qid(r["item"]["value"])
             rankvalue = qid(r["rankvalue"]["value"])
-            f.write(f"{item}\tP13723\t{rankvalue}\tP1027\tQ712534\n")
+            f.write(f"{item}|P13723|{rankvalue}|P1027|Q712534\n")
 
     print(f"Written {len(results)} QuickStatements lines to {output_file}")
 
