@@ -1,6 +1,8 @@
 name: Generate QuickStatements & Deploy to Pages
 
 on:
+  push:
+    branches: [master]
   schedule:
     - cron: '0 6 * * 1'  # Weekly on Monday at 06:00 UTC
   workflow_dispatch:
