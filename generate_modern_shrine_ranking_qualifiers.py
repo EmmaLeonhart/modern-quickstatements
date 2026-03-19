@@ -24,6 +24,23 @@ HEADERS = {
     "Accept": "application/sparql-results+json",
 }
 
+# Phase 0: Property-level edits to P13723 itself
+# Broadens P13723 from "modern shrine ranking" to general "shrine ranking"
+PROPERTY_EDITS_FILE = "edit_p13723_property.txt"
+PROPERTY_EDITS = [
+    'P13723|Len|"shrine ranking"',
+    'P13723|Lfr|"classement des sanctuaires"',
+    'P13723|Lid|"peringkat kuil Shinto"',
+    'P13723|Lja|"神社の社格"',
+    'P13723|Lnl|"schrijnrang"',
+    'P13723|Ltok|"nanpa pi tomo sewi"',
+    'P13723|Lca|"rang de santuaris"',
+    'P13723|Lmk|"ранг на светилиште"',
+    '-P13723|P1629|Q712534',
+    'P13723|P1629|Q10444029',
+    'P13723|P2302|Q21510856|P1027',
+]
+
 # Migration categories: old P31/P1552 values → P13723 with P1027 qualifier
 MIGRATIONS = [
     {
@@ -229,6 +246,19 @@ def fetch_claims_batch(item_ids, source_property):
     return all_claims
 
 
+def generate_property_edits():
+    """Phase 0: Write property-level edits for P13723 itself."""
+    print("\n=== Phase 2: P13723 property edits ===")
+    with open(PROPERTY_EDITS_FILE, "w", encoding="utf-8") as f:
+        for line in PROPERTY_EDITS:
+            f.write(line + "\n")
+    print(f"Written {len(PROPERTY_EDITS)} lines to {PROPERTY_EDITS_FILE}")
+    return {
+        "output_file": PROPERTY_EDITS_FILE,
+        "lines": len(PROPERTY_EDITS),
+    }
+
+
 def generate_p1027_qualifiers():
     """Phase 1: Add P1027 qualifiers to existing P13723 statements."""
     total_query = """
@@ -370,7 +400,7 @@ def generate_migration(migration):
     }
 
 
-def generate_html(p1027_stats, migration_stats):
+def generate_html(p1027_stats, migration_stats, prop_stats):
     """Generate the site index.html with progress for all categories."""
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -447,7 +477,14 @@ def generate_html(p1027_stats, migration_stats):
   <p><a href="{p1027_stats["output_file"]}">Download QuickStatements</a>
      ({p1027_stats["remaining"]} lines)</p>
 
-  <h2>Phase 2: Migrate old properties to P13723</h2>
+  <h2>Phase 2: Edit P13723 property definition</h2>
+  <p>Broaden <code>P13723</code> from &ldquo;modern shrine ranking&rdquo; to general &ldquo;shrine ranking&rdquo;.
+     Updates labels, changes subject type constraint from <code>Q712534</code> to <code>Q10444029</code>,
+     and adds <code>P1027</code> qualifier constraint.</p>
+  <p><a href="{prop_stats["output_file"]}">Download QuickStatements</a>
+     ({prop_stats["lines"]} lines)</p>
+
+  <h2>Phase 3: Migrate old properties to P13723</h2>
   <p>Migrate <code>P31</code> / <code>P1552</code> shrine ranking values to <code>P13723</code>,
      preserving all existing qualifiers and references, and adding the appropriate
      <code>P1027</code> (conferred by) qualifier.</p>
@@ -467,7 +504,10 @@ def main():
     # Phase 1: P1027 qualifiers for existing P13723 statements
     p1027_stats = generate_p1027_qualifiers()
 
-    # Phase 2: Migrate old P31/P1552 values to P13723
+    # Phase 2: Property-level edits to P13723 (after modern qualifiers, before migrations)
+    prop_stats = generate_property_edits()
+
+    # Phase 3: Migrate old P31/P1552 values to P13723
     migration_stats = []
     for migration in MIGRATIONS:
         stats = generate_migration(migration)
@@ -475,16 +515,16 @@ def main():
         time.sleep(2)  # Be nice to SPARQL endpoint between categories
 
     # Build site
-    generate_html(p1027_stats, migration_stats)
+    generate_html(p1027_stats, migration_stats, prop_stats)
 
     # Copy all QuickStatements files into _site
-    all_files = [p1027_stats["output_file"]] + [m["output_file"] for m in migration_stats]
+    all_files = [p1027_stats["output_file"]] + [m["output_file"] for m in migration_stats] + [prop_stats["output_file"]]
     for fname in all_files:
         if os.path.exists(fname):
             shutil.copy(fname, os.path.join("_site", fname))
 
     # Write summary JSON
-    summary = {"p1027": p1027_stats, "migrations": migration_stats}
+    summary = {"p1027": p1027_stats, "migrations": migration_stats, "property_edits": prop_stats}
     with open("_site/summary.json", "w") as f:
         json.dump(summary, f, indent=2)
 
