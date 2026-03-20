@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
+MAX_LINES_PER_BATCH = 200  # Budget ~200 QuickStatements per day per file
+
 SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
 HEADERS = {
@@ -288,11 +290,17 @@ def generate_p1027_qualifiers():
     print(f"Found {remaining} to qualify ({completed}/{total} done)")
 
     output_file = "modern_shrine_ranking_qualifiers.txt"
+    all_lines = []
+    for r in results:
+        item = qid(r["item"]["value"])
+        rankvalue = qid(r["rankvalue"]["value"])
+        all_lines.append(f"{item}|P13723|{rankvalue}|P1027|Q712534")
+
     with open(output_file, "w", encoding="utf-8") as f:
-        for r in results:
-            item = qid(r["item"]["value"])
-            rankvalue = qid(r["rankvalue"]["value"])
-            f.write(f"{item}|P13723|{rankvalue}|P1027|Q712534\n")
+        for line in all_lines:
+            f.write(line + "\n")
+
+    print(f"Written {len(all_lines)} lines to {output_file}")
 
     return {
         "name": "P1027 qualifiers (conferred by)",
@@ -301,6 +309,7 @@ def generate_p1027_qualifiers():
         "remaining": remaining,
         "completed": completed,
         "output_file": output_file,
+        "lines": len(all_lines),
     }
 
 
@@ -400,6 +409,24 @@ def generate_migration(migration):
     }
 
 
+def read_first_n_lines(filepath, n=MAX_LINES_PER_BATCH):
+    """Read the first n lines from a file, return them as a single string."""
+    if not os.path.exists(filepath):
+        return ""
+    with open(filepath, "r", encoding="utf-8") as f:
+        lines = []
+        for i, line in enumerate(f):
+            if i >= n:
+                break
+            lines.append(line.rstrip("\n"))
+    return "\n".join(lines)
+
+
+def html_escape(text):
+    """Escape text for safe embedding in HTML."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
 def generate_html(p1027_stats, migration_stats, prop_stats):
     """Generate the site index.html with progress for all categories."""
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -409,9 +436,19 @@ def generate_html(p1027_stats, migration_stats, prop_stats):
 
     p1027_pct = progress_pct(p1027_stats["completed"], p1027_stats["total"])
 
+    # Read first 200 lines for copy-paste boxes
+    p1027_batch = read_first_n_lines(p1027_stats["output_file"])
+    p1027_batch_escaped = html_escape(p1027_batch)
+    prop_batch = read_first_n_lines(prop_stats["output_file"])
+    prop_batch_escaped = html_escape(prop_batch)
+
     migration_sections = ""
     for m in migration_stats:
         pct = progress_pct(m["completed"], m["total"])
+        batch_lines = read_first_n_lines(m["output_file"])
+        batch_escaped = html_escape(batch_lines)
+        total_lines = m.get("lines", m["remaining"])
+        shown = min(total_lines, MAX_LINES_PER_BATCH)
         migration_sections += f"""
     <div class="category">
       <h3>{m["name"]}</h3>
@@ -425,7 +462,9 @@ def generate_html(p1027_stats, migration_stats, prop_stats):
           <div class="progress-fill" style="width: {max(pct, 2)}%">{pct}%</div>
         </div>
       </div>
-      <p><a href="{m["output_file"]}">Download QuickStatements</a> ({m.get("lines", m["remaining"])} lines)</p>
+      <p>Today's batch: {shown} of {total_lines} total lines
+         &mdash; <a href="{m["output_file"]}">Download all</a></p>
+      <textarea class="qs-box" rows="10" readonly onclick="this.select()">{batch_escaped}</textarea>
     </div>"""
 
     html = f"""<!DOCTYPE html>
@@ -452,6 +491,8 @@ def generate_html(p1027_stats, migration_stats, prop_stats):
     .timestamp {{ color: #888; font-size: 0.85rem; }}
     .instructions {{ background: #fff3e0; padding: 1rem; border-radius: 4px; margin: 1rem 0;
                      border-left: 4px solid #ff9800; }}
+    .qs-box {{ width: 100%; font-family: monospace; font-size: 0.8rem; background: #f5f5f5;
+               border: 1px solid #ccc; border-radius: 4px; padding: 0.5rem; resize: vertical; }}
   </style>
 </head>
 <body>
@@ -459,9 +500,10 @@ def generate_html(p1027_stats, migration_stats, prop_stats):
   <p class="timestamp">Last updated: {generated}</p>
 
   <div class="instructions">
-    <strong>How to use:</strong> Download the QuickStatements files and paste into
+    <strong>How to use:</strong> Click a text box below to select its contents, then paste into
     <a href="https://quickstatements.toolforge.org/#/batch">QuickStatements</a>.
-    Run them in order from top to bottom &mdash; Phase 1 first, then each migration.
+    Each box shows up to {MAX_LINES_PER_BATCH} lines (~1 day's budget). Full files available via download links.
+    Run in order: Phase 1 first, then each migration.
   </div>
 
   <h2>Phase 1: Add P1027 qualifiers to existing P13723</h2>
@@ -474,15 +516,16 @@ def generate_html(p1027_stats, migration_stats, prop_stats):
       <div class="progress-fill" style="width: {max(p1027_pct, 2)}%">{p1027_pct}%</div>
     </div>
   </div>
-  <p><a href="{p1027_stats["output_file"]}">Download QuickStatements</a>
-     ({p1027_stats["remaining"]} lines)</p>
+  <p>Today's batch: {min(p1027_stats.get("lines", p1027_stats["remaining"]), MAX_LINES_PER_BATCH)} of {p1027_stats.get("lines", p1027_stats["remaining"])} total lines
+     &mdash; <a href="{p1027_stats["output_file"]}">Download all</a></p>
+  <textarea class="qs-box" rows="10" readonly onclick="this.select()">{p1027_batch_escaped}</textarea>
 
   <h2>Phase 2: Edit P13723 property definition</h2>
   <p>Broaden <code>P13723</code> from &ldquo;modern shrine ranking&rdquo; to general &ldquo;shrine ranking&rdquo;.
      Updates labels, changes subject type constraint from <code>Q712534</code> to <code>Q10444029</code>,
      and adds <code>P1027</code> qualifier constraint.</p>
-  <p><a href="{prop_stats["output_file"]}">Download QuickStatements</a>
-     ({prop_stats["lines"]} lines)</p>
+  <p>{prop_stats["lines"]} lines &mdash; <a href="{prop_stats["output_file"]}">Download all</a></p>
+  <textarea class="qs-box" rows="6" readonly onclick="this.select()">{prop_batch_escaped}</textarea>
 
   <h2>Phase 3: Migrate old properties to P13723</h2>
   <p>Migrate <code>P31</code> / <code>P1552</code> shrine ranking values to <code>P13723</code>,
