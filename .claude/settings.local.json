@@ -8,7 +8,9 @@
       "Bash(cd:*)",
       "Bash(sleep:*)",
       "Bash(git add:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(grep -E \"\\\\.\\(txt|json\\)$\")",
+      "Bash(git commit:*)"
     ]
   }
 }
