@@ -313,11 +313,71 @@ def generate_p459_qualifiers():
     }
 
 
+def rebuild_claim_with_p459(item_id, claim, p1027_value):
+    """Rebuild a P13723 claim replacing P1027 with P459, preserving all other qualifiers and references.
+
+    Returns QuickStatements lines for the new statement with:
+    - The original value
+    - P459 qualifier (replacing P1027) with the same value
+    - All other original qualifiers preserved
+    - All original references preserved
+    """
+    main_value = snak_to_qs(claim["mainsnak"])
+    if not main_value:
+        return []
+
+    parts = [item_id, "P13723", main_value]
+
+    # Add P459 replacing P1027, then all other qualifiers
+    parts.extend(["P459", p1027_value])
+
+    qualifiers = claim.get("qualifiers", {})
+    qual_order = claim.get("qualifiers-order", list(qualifiers.keys()))
+    for prop in qual_order:
+        if prop == "P1027":
+            continue  # Skip P1027 — replaced by P459 above
+        for qsnak in qualifiers.get(prop, []):
+            val = snak_to_qs(qsnak)
+            if val is not None:
+                parts.extend([prop, val])
+
+    # Preserve references
+    references = claim.get("references", [])
+
+    if references:
+        ref = references[0]
+        ref_order = ref.get("snaks-order", list(ref.get("snaks", {}).keys()))
+        for prop in ref_order:
+            for rsnak in ref["snaks"].get(prop, []):
+                val = snak_to_qs(rsnak)
+                if val is not None:
+                    parts.extend([f"S{prop[1:]}", val])
+
+    lines = ["|".join(parts)]
+
+    # Additional reference groups as separate lines
+    for ref in references[1:]:
+        ref_parts = [item_id, "P13723", main_value]
+        ref_order = ref.get("snaks-order", list(ref.get("snaks", {}).keys()))
+        has_refs = False
+        for prop in ref_order:
+            for rsnak in ref["snaks"].get(prop, []):
+                val = snak_to_qs(rsnak)
+                if val is not None:
+                    ref_parts.extend([f"S{prop[1:]}", val])
+                    has_refs = True
+        if has_refs:
+            lines.append("|".join(ref_parts))
+
+    return lines
+
+
 def generate_p1027_to_p459_replacement():
     """Phase 1.5: Replace existing P1027 qualifiers with P459 on P13723 statements.
 
     Finds all P13723 statements that still have a P1027 qualifier,
-    generates QuickStatements to remove P1027 and add P459 with the same value.
+    generates QuickStatements to remove the old statement and re-add it with P459
+    instead of P1027, preserving all other qualifiers and references.
     """
     query = """
     SELECT ?item ?rankvalue ?conferredBy WHERE {
@@ -333,16 +393,50 @@ def generate_p1027_to_p459_replacement():
     results = fetch_sparql(query)
     print(f"Found {len(results)} statements to update")
 
-    output_file = "replace_p1027_with_p459.txt"
-    lines = []
+    if not results:
+        output_file = "replace_p1027_with_p459.txt"
+        open(output_file, "w").close()
+        return {
+            "name": "Replace P1027 with P459",
+            "description": "Replace P1027 (conferred by) qualifiers with P459 (determination method or standard) on existing P13723 statements",
+            "total": 0,
+            "remaining": 0,
+            "completed": 0,
+            "output_file": output_file,
+            "lines": 0,
+        }
+
+    # Group by item to know which items to fetch
+    items_p1027 = {}
     for r in results:
         item = qid(r["item"]["value"])
         rankvalue = qid(r["rankvalue"]["value"])
         conferred = qid(r["conferredBy"]["value"])
-        # Remove the old P1027 qualifier
-        lines.append(f"-{item}|P13723|{rankvalue}|P1027|{conferred}")
-        # Add P459 with the same value
-        lines.append(f"{item}|P13723|{rankvalue}|P459|{conferred}")
+        items_p1027.setdefault(item, []).append((rankvalue, conferred))
+
+    # Fetch full claim details from Wikidata API to get all qualifiers + references
+    print(f"Fetching claim details ({len(items_p1027)} items)...")
+    all_claims = fetch_claims_batch(list(items_p1027.keys()), "P13723")
+
+    output_file = "replace_p1027_with_p459.txt"
+    lines = []
+    for item_id, targets in sorted(items_p1027.items()):
+        for rankvalue, conferred in targets:
+            # Find the matching claim in the API results
+            for claim in all_claims.get(item_id, []):
+                cv = snak_to_qs(claim["mainsnak"])
+                if cv != rankvalue:
+                    continue
+                # Check this claim actually has P1027 with the expected value
+                p1027_snaks = claim.get("qualifiers", {}).get("P1027", [])
+                has_match = any(snak_to_qs(s) == conferred for s in p1027_snaks)
+                if not has_match:
+                    continue
+                # Remove the old statement
+                lines.append(f"-{item_id}|P13723|{rankvalue}")
+                # Re-add with P459 replacing P1027, preserving everything else
+                lines.extend(rebuild_claim_with_p459(item_id, claim, conferred))
+                break
 
     with open(output_file, "w", encoding="utf-8") as f:
         for line in lines:
@@ -352,7 +446,7 @@ def generate_p1027_to_p459_replacement():
 
     return {
         "name": "Replace P1027 with P459",
-        "description": "Replace P1027 (conferred by) qualifiers with P459 (determination method or standard) on existing P13723 statements",
+        "description": "Replace P1027 (conferred by) qualifiers with P459 (determination method or standard) on existing P13723 statements, preserving all other qualifiers and references",
         "total": len(results),
         "remaining": len(results),
         "completed": 0,
