@@ -503,6 +503,12 @@ def generate_html(p459_stats, replace_stats, migration_stats, prop_stats):
 
     p459_pct = progress_pct(p459_stats["completed"], p459_stats["total"])
 
+    # Phase 1 three-segment bar: green (P459 done), red (has P1027 wrong qualifier), gray (nothing)
+    p459_total = p459_stats["total"] if p459_stats["total"] > 0 else 1
+    p459_green_pct = p459_stats["completed"] * 100 / p459_total
+    p459_red_count = replace_stats["total"]
+    p459_red_pct = p459_red_count * 100 / p459_total
+
     # Read first 200 lines for copy-paste boxes
     p459_batch = read_first_n_lines(p459_stats["output_file"])
     p459_batch_escaped = html_escape(p459_batch)
@@ -551,10 +557,12 @@ def generate_html(p459_stats, replace_stats, migration_stats, prop_stats):
     a {{ color: #0645ad; }}
     code {{ background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.9em; }}
     .stats {{ background: #e8f4e8; padding: 1rem; border-radius: 4px; margin: 0.75rem 0; }}
-    .progress-bar {{ background: #ddd; border-radius: 8px; overflow: hidden; height: 24px; margin: 0.5rem 0; }}
+    .progress-bar {{ background: #ddd; border-radius: 8px; overflow: hidden; height: 24px; margin: 0.5rem 0; display: flex; }}
     .progress-fill {{ background: #4caf50; height: 100%; text-align: center; color: white;
-                      font-size: 0.85rem; line-height: 24px; min-width: 2rem;
+                      font-size: 0.85rem; line-height: 24px;
                       transition: width 0.3s ease; }}
+    .progress-fill.red {{ background: #e53935; }}
+    .progress-fill:not(:empty) {{ min-width: 2rem; }}
     .category {{ border: 1px solid #e0e0e0; border-radius: 8px; padding: 1rem 1.25rem; margin: 1rem 0; }}
     .desc {{ color: #666; margin: 0.25rem 0 0.75rem; font-size: 0.95rem; }}
     .timestamp {{ color: #888; font-size: 0.85rem; }}
@@ -580,9 +588,11 @@ def generate_html(p459_stats, replace_stats, migration_stats, prop_stats):
      (modern system of ranked Shinto shrines) to all existing <code>P13723</code> statements.</p>
   <div class="stats">
     <strong>{p459_stats["completed"]} / {p459_stats["total"]} done</strong> ({p459_pct}%)
-    &mdash; <strong>{p459_stats["remaining"]} remaining</strong>
+    &mdash; <span style="color:#e53935"><strong>{p459_red_count} with wrong qualifier (P1027)</strong></span>
+    &mdash; <strong>{p459_stats["remaining"] - p459_red_count} with no qualifier</strong>
     <div class="progress-bar">
-      <div class="progress-fill" style="width: {max(p459_pct, 2)}%">{p459_pct}%</div>
+      <div class="progress-fill" style="width: {max(p459_green_pct, 2 if p459_stats['completed'] else 0):.1f}%">{p459_stats["completed"]}</div>
+      <div class="progress-fill red" style="width: {max(p459_red_pct, 2 if p459_red_count else 0):.1f}%">{p459_red_count}</div>
     </div>
   </div>
   <p>Today's batch: {min(p459_stats.get("lines", p459_stats["remaining"]), MAX_LINES_PER_BATCH)} of {p459_stats.get("lines", p459_stats["remaining"])} total lines
