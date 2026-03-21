@@ -572,7 +572,7 @@ def generate_html(p459_stats, replace_stats, migration_stats, prop_stats):
     <strong>How to use:</strong> Click a text box below to select its contents, then paste into
     <a href="https://quickstatements.toolforge.org/#/batch">QuickStatements</a>.
     Each box shows up to {MAX_LINES_PER_BATCH} lines (~1 day's budget). Full files available via download links.
-    Run in order: Phase 1 first, then each migration.
+    Run in order: Phase 1.5 first (fix existing P1027), then Phase 1 (add P459), then Phase 2, then each migration.
   </div>
 
   <h2>Phase 1: Add P459 qualifiers to existing P13723</h2>
