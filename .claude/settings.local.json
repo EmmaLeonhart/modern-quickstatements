@@ -10,7 +10,9 @@
       "Bash(git add:*)",
       "Bash(git push:*)",
       "Bash(grep -E \"\\\\.\\(txt|json\\)$\")",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(find C:UsersImmanuelleDocumentsGithubmodern-quickstatements -type f \\\\\\(-name *.py -o -name *.html -o -name *.css -o -name *.js \\\\\\))",
+      "Bash(grep -iE \"\\\\.\\(html|css|js|py\\)$\")"
     ]
   }
 }
