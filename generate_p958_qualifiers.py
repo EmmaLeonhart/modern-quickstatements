@@ -194,16 +194,15 @@ def main():
         children = sorted(parent_data["children"], key=lambda c: c["ranking"])
         rankings = [c["ranking"] for c in children]
 
-        # Check sequence: should be 1,2,3... or 0,1,2,3...
-        if rankings and rankings[0] == 0:
-            expected = list(range(0, len(rankings)))
-        else:
-            expected = list(range(1, len(rankings) + 1))
+        # Check sequence: zeroes mean "not in ordering" and multiple are allowed.
+        # Non-zero rankings should form a contiguous 1,2,3... sequence.
+        non_zero = [r for r in rankings if r != 0]
+        expected_non_zero = list(range(1, len(non_zero) + 1))
 
-        if rankings != expected:
+        if non_zero != expected_non_zero:
             flagged_sequence.append(
                 f"  {parent_qid} ({parent_data['label']}): "
-                f"rankings={rankings}, expected={expected}"
+                f"non-zero rankings={non_zero}, expected={expected_non_zero}"
             )
 
         for child in children:
