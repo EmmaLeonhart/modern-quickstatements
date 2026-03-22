@@ -27,7 +27,6 @@ jobs:
       - name: Submit daily batch via QuickStatements API
         env:
           QUICKSTATEMENTS_API_KEY: ${{ secrets.QUICKSTATEMENTS_API_KEY }}
-          QUICKSTATEMENTS_USERNAME: ${{ secrets.QUICKSTATEMENTS_USERNAME }}
         run: python submit_daily_batch.py
 
       - name: Commit and push run report

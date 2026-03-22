@@ -10,7 +10,6 @@ Writes a run report to reports/ after each run.
 
 Expects environment variables:
   QUICKSTATEMENTS_API_KEY  - API token from QuickStatements user page
-  QUICKSTATEMENTS_USERNAME - Wikidata username associated with the token
 """
 
 import io
@@ -109,11 +108,11 @@ def main():
     }
 
     token = os.environ.get("QUICKSTATEMENTS_API_KEY", "")
-    username = os.environ.get("QUICKSTATEMENTS_USERNAME", "")
+    username = "Immanuelle"
 
-    if not token or not username:
+    if not token:
         report["outcome"] = "error"
-        report["error"] = "QUICKSTATEMENTS_API_KEY and QUICKSTATEMENTS_USERNAME must be set"
+        report["error"] = "QUICKSTATEMENTS_API_KEY must be set"
         print(f"ERROR: {report['error']}")
         write_report(report)
         sys.exit(1)
