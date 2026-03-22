@@ -21,7 +21,23 @@ Outputs `modern_shrine_ranking_qualifiers.txt` — paste into [QuickStatements](
 - **4,179** statements across all shrines with `P13723`
 - QuickStatements v1 format: `QXXX|P13723|QYYY|P459|Q712534`
 
-## Future Plans
+## Automated Submission
 
-- GitHub Actions automation for regenerating QuickStatements
-- Support for other shrine ranking system qualifiers
+A daily cron job (06:00 UTC) regenerates the QuickStatements files and submits the atomic Phase 1/1.5 lines via the [QuickStatements API](https://www.wikidata.org/wiki/Help:QuickStatements#Using_the_API_to_start_batches). A random 1–3600 second delay is added before submission.
+
+Only atomic operations are submitted automatically:
+- **Phase 1**: Add P459 qualifiers to existing P13723 (each line is independent)
+- **Phase 1.5**: Replace P1027→P459 on existing P13723 (each line is independent)
+
+Phase 3 migration lines (remove old property + add new P13723) are **non-atomic** and require manual submission.
+
+### Required Secrets
+
+| Secret | Description |
+|--------|-------------|
+| `QUICKSTATEMENTS_API_KEY` | API token from your [QuickStatements user page](https://quickstatements.toolforge.org/) |
+| `QUICKSTATEMENTS_USERNAME` | Wikidata username associated with the token |
+
+Set these in **Settings → Secrets and variables → Actions** on the GitHub repo.
+
+Note: The QuickStatements API may reject requests from GitHub Actions IPs. If that happens, the job simply fails — no retries.
