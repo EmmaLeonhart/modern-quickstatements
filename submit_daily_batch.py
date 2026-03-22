@@ -1,7 +1,7 @@
 """Submit the daily budget of atomic QuickStatements via the QuickStatements API.
 
-Only submits Phase 1 (P459 qualifiers) and Phase 1.5 (P1027→P459 replacement)
-lines, which are atomic operations safe for unattended execution.
+Submits Phase 1 (P459 qualifier addition) and P958 qualifier lines,
+which are atomic operations safe for unattended execution.
 
 Phase 3 migration lines are non-atomic (remove old + add new) and require
 manual review, so they are NOT submitted here.
@@ -29,7 +29,6 @@ MAX_LINES_PER_BATCH = 200
 
 ATOMIC_FILES = [
     "modern_shrine_ranking_qualifiers.txt",   # Phase 1: add P459 to existing P13723
-    # "replace_p1027_with_p459.txt",          # Phase 1.5: non-atomic (remove + re-add), manual only
     "p958_qualifiers.txt",                    # Add P958 section qualifiers to P13677
 ]
 
