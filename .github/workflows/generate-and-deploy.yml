@@ -44,3 +44,25 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  submit:
+    needs: build
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install requests
+
+      - name: Regenerate QuickStatements files
+        run: python generate_modern_shrine_ranking_qualifiers.py
+
+      - name: Submit daily batch via QuickStatements API
+        env:
+          QUICKSTATEMENTS_API_KEY: ${{ secrets.QUICKSTATEMENTS_API_KEY }}
+          QUICKSTATEMENTS_USERNAME: ${{ secrets.QUICKSTATEMENTS_USERNAME }}
+        run: python submit_daily_batch.py
