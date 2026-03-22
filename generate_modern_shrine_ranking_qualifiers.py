@@ -588,6 +588,79 @@ def html_escape(text):
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
+def load_p958_summary():
+    """Load P958 summary JSON if it exists."""
+    path = "p958_summary.json"
+    if not os.path.exists(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def generate_p958_html_section(summary):
+    """Generate HTML section for P958 qualifier work."""
+    if not summary:
+        return ""
+
+    total = summary["generated"] + summary["completed"]
+    completed = summary["completed"]
+    pct = completed * 100 // total if total > 0 else 0
+
+    # Read the QuickStatements for the copy-paste box
+    qs_batch = read_first_n_lines(summary["output_file"])
+    qs_escaped = html_escape(qs_batch)
+
+    # Build manual review table
+    manual_rows = ""
+    for item in summary.get("manual_review_items", []):
+        parts = item.split("\t")
+        if len(parts) >= 6:
+            qid, label, parent, ranking, count, link_type = parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]
+            manual_rows += f"<tr><td><a href=\"https://www.wikidata.org/wiki/{qid}\">{qid}</a></td><td>{html_escape(label)}</td><td>{html_escape(parent)}</td><td>{ranking}</td><td>{count}</td><td>{link_type}</td></tr>\n"
+
+    manual_table = ""
+    if manual_rows:
+        manual_table = f"""
+    <details>
+      <summary><strong>{summary["manual_review"]} items need manual review</strong> (multiple P13677 statements)</summary>
+      <table border="1" cellpadding="4" cellspacing="0" style="border-collapse: collapse; font-size: 0.85rem; margin-top: 0.5rem;">
+        <tr><th>QID</th><th>Label</th><th>Parent</th><th>Ranking</th><th>P13677 count</th><th>Link type</th></tr>
+        {manual_rows}
+      </table>
+    </details>"""
+
+    # Build sequence anomaly list
+    anomaly_list = ""
+    if summary.get("sequence_anomaly_items"):
+        items = "\n".join(f"<li><code>{html_escape(a.strip())}</code></li>" for a in summary["sequence_anomaly_items"])
+        anomaly_list = f"""
+    <details>
+      <summary><strong>{summary["sequence_anomalies"]} ranking sequence anomalies</strong></summary>
+      <ul style="font-size: 0.85rem;">{items}</ul>
+    </details>"""
+
+    shown = min(summary["generated"], MAX_LINES_PER_BATCH)
+
+    return f"""
+  <h2>P958: Kokugakuin Museum Entry ID Section Qualifiers</h2>
+  <p>Add <code>P958</code> (section) qualifiers to <code>P13677</code> (Kokugakuin University Digital Museum entry ID)
+     on Ronsha items, based on <code>P1352</code> (ranking) qualifiers from Shikinaisha
+     <code>P527</code>/<code>P460</code> links.</p>
+  <div class="stats">
+    <strong>{completed} / {total} done</strong> ({pct}%)
+    &mdash; <strong>{summary["generated"]} remaining</strong>
+    &mdash; {summary["skipped_no_p13677"]} skipped (no P13677)
+    <div class="progress-bar">
+      <div class="progress-fill" style="width: {max(pct, 2 if completed else 0)}%">{pct}%</div>
+    </div>
+  </div>
+  <p>Today's batch: {shown} of {summary["generated"]} total lines
+     &mdash; <a href="{summary["output_file"]}">Download all</a></p>
+  <textarea class="qs-box" rows="10" readonly onclick="this.select()">{qs_escaped}</textarea>
+  {manual_table}
+  {anomaly_list}"""
+
+
 def generate_html(p459_stats, replace_stats, migration_stats, prop_stats):
     """Generate the site index.html with progress for all categories."""
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -610,6 +683,10 @@ def generate_html(p459_stats, replace_stats, migration_stats, prop_stats):
     replace_batch_escaped = html_escape(replace_batch)
     prop_batch = read_first_n_lines(prop_stats["output_file"])
     prop_batch_escaped = html_escape(prop_batch)
+
+    # P958 section from separate generator
+    p958_summary = load_p958_summary()
+    p958_section = generate_p958_html_section(p958_summary)
 
     migration_sections = ""
     for m in migration_stats:
@@ -713,6 +790,41 @@ def generate_html(p459_stats, replace_stats, migration_stats, prop_stats):
      <code>P459</code> (determination method or standard) qualifier.</p>
   {migration_sections}
 
+  {p958_section}
+
+  <h2>Duplicate Properties on Shikinai Ronsha</h2>
+  <p>Due to import issues, many <a href="https://www.wikidata.org/wiki/Q135022904">Shikinai Ronsha</a> items
+     have duplicate <code>P361</code>, <code>P1448</code>, and <code>P6375</code> statements.
+     These need investigation and cleanup.</p>
+
+  <div class="category">
+    <h3>P361 (part of) &mdash; duplicates</h3>
+    <p class="desc">Items with multiple P361 statements, often identical values from re-imports.
+      The duplicates seem related to ordering in the Engishiki lists. Could potentially be fixed by
+      walking through the lists again.</p>
+    <p><a href="https://query.wikidata.org/#SELECT%20%3Fitem%20%3FitemLabel%20%28COUNT%28%3Fs%29%20AS%20%3Fcount%29%20WHERE%20%7B%0A%20%20%3Fitem%20wdt%3AP31%20wd%3AQ135022904%20.%0A%20%20%3Fitem%20p%3AP361%20%3Fs%20.%0A%20%20SERVICE%20wikibase%3Alabel%20%7B%20bd%3AserviceParam%20wikibase%3Alanguage%20%22en%2Cja%22%20%7D%0A%7D%20GROUP%20BY%20%3Fitem%20%3FitemLabel%20HAVING%28COUNT%28%3Fs%29%20%3E%201%29%20ORDER%20BY%20DESC%28%3Fcount%29">Run SPARQL query &rarr;</a>
+       Find all Shikinai Ronsha with more than one P361 statement.</p>
+  </div>
+
+  <div class="category">
+    <h3>P1448 (official name) &mdash; duplicates</h3>
+    <p class="desc">Items with multiple P1448 statements. These tend to be property-heavy.
+      The incorrect ones appear to be detectable via their source references.</p>
+    <p><a href="https://query.wikidata.org/#SELECT%20%3Fitem%20%3FitemLabel%20%28COUNT%28%3Fs%29%20AS%20%3Fcount%29%20WHERE%20%7B%0A%20%20%3Fitem%20wdt%3AP31%20wd%3AQ135022904%20.%0A%20%20%3Fitem%20p%3AP1448%20%3Fs%20.%0A%20%20SERVICE%20wikibase%3Alabel%20%7B%20bd%3AserviceParam%20wikibase%3Alanguage%20%22en%2Cja%22%20%7D%0A%7D%20GROUP%20BY%20%3Fitem%20%3FitemLabel%20HAVING%28COUNT%28%3Fs%29%20%3E%201%29%20ORDER%20BY%20DESC%28%3Fcount%29">Run SPARQL query &rarr;</a>
+       Find all Shikinai Ronsha with more than one P1448 statement.</p>
+  </div>
+
+  <div class="category">
+    <h3>P6375 (street address) &mdash; duplicates</h3>
+    <p class="desc">Items with multiple P6375 statements. These are simpler duplicates and
+      someone other than the original importer would be best to assess them.</p>
+    <p><a href="https://query.wikidata.org/#SELECT%20%3Fitem%20%3FitemLabel%20%28COUNT%28%3Fs%29%20AS%20%3Fcount%29%20WHERE%20%7B%0A%20%20%3Fitem%20wdt%3AP31%20wd%3AQ135022904%20.%0A%20%20%3Fitem%20p%3AP6375%20%3Fs%20.%0A%20%20SERVICE%20wikibase%3Alabel%20%7B%20bd%3AserviceParam%20wikibase%3Alanguage%20%22en%2Cja%22%20%7D%0A%7D%20GROUP%20BY%20%3Fitem%20%3FitemLabel%20HAVING%28COUNT%28%3Fs%29%20%3E%201%29%20ORDER%20BY%20DESC%28%3Fcount%29">Run SPARQL query &rarr;</a>
+       Find all Shikinai Ronsha with more than one P6375 statement.</p>
+  </div>
+
+  <p class="desc">Example of all three issues on a single item:
+     <a href="https://www.wikidata.org/wiki/Q59282644">Q59282644</a> (Takagi Shrine)</p>
+
   <hr>
   <p class="timestamp">Generated automatically from SPARQL + Wikidata API data.</p>
 </body>
@@ -745,6 +857,10 @@ def main():
 
     # Copy all QuickStatements files into _site
     all_files = [p459_stats["output_file"], replace_stats["output_file"]] + [m["output_file"] for m in migration_stats] + [prop_stats["output_file"]]
+    # Include P958 files if they exist
+    for p958_file in ["p958_qualifiers.txt", "p958_manual_review.txt"]:
+        if os.path.exists(p958_file):
+            all_files.append(p958_file)
     for fname in all_files:
         if os.path.exists(fname):
             shutil.copy(fname, os.path.join("_site", fname))
