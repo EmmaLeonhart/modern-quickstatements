@@ -14,6 +14,7 @@ occasional 0) are also flagged.
 """
 
 import io
+import json
 import sys
 import requests
 import time
@@ -30,6 +31,7 @@ HEADERS = {
 
 OUTPUT_FILE = "p958_qualifiers.txt"
 MANUAL_REVIEW_FILE = "p958_manual_review.txt"
+SUMMARY_FILE = "p958_summary.json"
 
 
 def sparql_query(query):
@@ -268,6 +270,24 @@ def main():
                 f.write("\n".join(manual_review) + "\n")
 
         print(f"Manual review items written to {MANUAL_REVIEW_FILE}")
+
+    # Write summary JSON for the page generator to pick up
+    total_links = len(results)
+    summary = {
+        "total_links": total_links,
+        "generated": len(quickstatements),
+        "completed": skipped_existing,
+        "skipped_no_p13677": skipped_no_p13677,
+        "manual_review": len(manual_review),
+        "sequence_anomalies": len(flagged_sequence),
+        "output_file": OUTPUT_FILE,
+        "manual_review_file": MANUAL_REVIEW_FILE,
+        "manual_review_items": manual_review,
+        "sequence_anomaly_items": flagged_sequence,
+    }
+    with open(SUMMARY_FILE, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2, ensure_ascii=False)
+    print(f"Summary written to {SUMMARY_FILE}")
 
 
 if __name__ == "__main__":
