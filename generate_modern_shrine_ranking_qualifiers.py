@@ -15,6 +15,7 @@ import shutil
 import requests
 import time
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
@@ -311,6 +312,76 @@ def generate_p459_qualifiers():
         "completed": completed,
         "output_file": output_file,
         "lines": len(all_lines),
+    }
+
+
+P4656_OUTPUT_FILE = "p4656_jawiki_references.txt"
+
+
+def generate_p4656_references():
+    """Generate P4656 (Wikimedia import URL) references for modern shrine rankings.
+
+    Only targets P13723 statements that already have P459=Q712534 (modern system)
+    and have a Japanese Wikipedia sitelink, but no P4656 reference yet.
+    """
+    query = """
+    SELECT ?item ?rankvalue ?articleName WHERE {
+      ?item p:P13723 ?stmt .
+      ?stmt ps:P13723 ?rankvalue .
+      ?stmt pq:P459 wd:Q712534 .
+      ?article schema:about ?item ;
+               schema:isPartOf <https://ja.wikipedia.org/> ;
+               schema:name ?articleName .
+      FILTER NOT EXISTS {
+        ?stmt prov:wasDerivedFrom ?ref .
+        ?ref pr:P4656 ?_ .
+      }
+    }
+    ORDER BY ?item
+    """
+
+    total_query = """
+    SELECT (COUNT(*) AS ?total) WHERE {
+      ?item p:P13723 ?stmt .
+      ?stmt ps:P13723 ?rankvalue .
+      ?stmt pq:P459 wd:Q712534 .
+    }
+    """
+
+    print("\n=== P4656 Japanese Wikipedia references ===")
+    print("Fetching total modern-qualified P13723 statements...")
+    total = int(fetch_sparql(total_query)[0]["total"]["value"])
+    print(f"Total P13723 statements with P459=Q712534: {total}")
+
+    print("Fetching statements needing P4656 reference...")
+    results = fetch_sparql(query)
+    remaining = len(results)
+    print(f"Found {remaining} statements with ja.wiki sitelink but no P4656 reference")
+
+    lines = []
+    for r in results:
+        item = qid(r["item"]["value"])
+        rankvalue = qid(r["rankvalue"]["value"])
+        article_name = r["articleName"]["value"]
+        # Encode article name for URL (spaces → underscores, then percent-encode)
+        encoded = quote(article_name.replace(" ", "_"), safe="/:@!$&'()*+,;=-._~")
+        url = f"https://ja.wikipedia.org/wiki/{encoded}"
+        lines.append(f'{item}|P13723|{rankvalue}|S4656|"{url}"')
+
+    with open(P4656_OUTPUT_FILE, "w", encoding="utf-8") as f:
+        for line in lines:
+            f.write(line + "\n")
+
+    print(f"Written {len(lines)} lines to {P4656_OUTPUT_FILE}")
+
+    return {
+        "name": "P4656 Japanese Wikipedia references",
+        "description": "Add Wikimedia import URL (P4656) references pointing to ja.wikipedia for modern-qualified P13723 statements",
+        "total": total,
+        "remaining": remaining,
+        "completed": total - remaining,
+        "output_file": P4656_OUTPUT_FILE,
+        "lines": len(lines),
     }
 
 
@@ -795,12 +866,13 @@ def generate_html(p459_stats, migration_stats, prop_stats):
         f.write(html)
 
 
-def generate_daily_operations(p459_stats, prop_stats, migration_stats):
+def generate_daily_operations(p459_stats, prop_stats, migration_stats, p4656_stats):
     """Generate the daily operations page — a single combined box of what to run now.
 
     Priority order:
     - Phase 1 (P459 qualifiers) until complete
     - Phase 2 (property edits) after Phase 1 complete
+    - P4656 references (always included when lines exist)
     - Phase 3 (migration adds + removes) after Phase 2 complete
     - P958 qualifiers always included
     """
@@ -833,6 +905,17 @@ def generate_daily_operations(p459_stats, prop_stats, migration_stats):
                 if os.path.exists(fpath):
                     with open(fpath, "r", encoding="utf-8") as f:
                         lines.extend(line.strip() for line in f if line.strip())
+
+    # Always include P4656 Japanese Wikipedia references
+    p4656_count = 0
+    p4656_file = p4656_stats["output_file"]
+    if os.path.exists(p4656_file):
+        with open(p4656_file, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped:
+                    lines.append(stripped)
+                    p4656_count += 1
 
     # Always include P958 qualifiers
     p958_file = "p958_qualifiers.txt"
@@ -890,6 +973,7 @@ def generate_daily_operations(p459_stats, prop_stats, migration_stats):
     <strong>Current phase:</strong> {phase_description}<br>
     <strong>{len(lines)} total lines</strong> (showing first {shown})
     &mdash; <a href="daily_operations.txt">Download all</a><br>
+    {"<em>Includes " + str(p4656_count) + " P4656 ja.wiki reference lines</em><br>" if p4656_count else ""}
     {"<em>Includes " + str(p958_count) + " P958 qualifier lines</em>" if p958_count else ""}
   </div>
 
@@ -913,6 +997,9 @@ def main():
     # Phase 2: Property-level edits to P13723 (after modern qualifiers, before migrations)
     prop_stats = generate_property_edits()
 
+    # P4656: Add Japanese Wikipedia references to modern-qualified P13723 statements
+    p4656_stats = generate_p4656_references()
+
     # Phase 3: Migrate old P31/P1552 values to P13723
     migration_stats = []
     for migration in MIGRATIONS:
@@ -922,14 +1009,14 @@ def main():
 
     # Build site
     generate_html(p459_stats, migration_stats, prop_stats)
-    generate_daily_operations(p459_stats, prop_stats, migration_stats)
+    generate_daily_operations(p459_stats, prop_stats, migration_stats, p4656_stats)
 
     # Copy all QuickStatements files into _site
     migration_files = []
     for m in migration_stats:
         migration_files.append(m["add_file"])
         migration_files.append(m["remove_file"])
-    all_files = [p459_stats["output_file"]] + migration_files + [prop_stats["output_file"]]
+    all_files = [p459_stats["output_file"], p4656_stats["output_file"]] + migration_files + [prop_stats["output_file"]]
     # Include P958 files if they exist
     for p958_file in ["p958_qualifiers.txt", "p958_manual_review.txt"]:
         if os.path.exists(p958_file):
@@ -939,7 +1026,7 @@ def main():
             shutil.copy(fname, os.path.join("_site", fname))
 
     # Write summary JSON
-    summary = {"p459": p459_stats, "migrations": migration_stats, "property_edits": prop_stats}
+    summary = {"p459": p459_stats, "p4656": p4656_stats, "migrations": migration_stats, "property_edits": prop_stats}
     with open("_site/summary.json", "w") as f:
         json.dump(summary, f, indent=2)
 
