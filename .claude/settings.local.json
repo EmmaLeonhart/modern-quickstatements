@@ -24,7 +24,8 @@
       "Bash(gh workflow:*)",
       "Bash(gh api:*)",
       "WebFetch(domain:pypi.org)",
-      "WebFetch(domain:emmaleonhart.github.io)"
+      "WebFetch(domain:emmaleonhart.github.io)",
+      "Bash(grep:*)"
     ]
   }
 }
