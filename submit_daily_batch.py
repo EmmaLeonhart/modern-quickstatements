@@ -22,7 +22,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 QS_API = "https://quickstatements.toolforge.org/api.php"
 MAX_RETRIES = 10
-RETRY_DELAY = 30  # seconds between retries
+RETRY_DELAY = 20  # seconds between retries
 
 ATOMIC_FILES = [
     "modern_shrine_ranking_qualifiers.txt",   # Phase 1: add P459 to existing P13723
