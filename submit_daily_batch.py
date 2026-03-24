@@ -21,7 +21,7 @@ import requests
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 QS_API = "https://quickstatements.toolforge.org/api.php"
-MAX_RETRIES = 3
+MAX_RETRIES = 10
 RETRY_DELAY = 30  # seconds between retries
 
 ATOMIC_FILES = [
