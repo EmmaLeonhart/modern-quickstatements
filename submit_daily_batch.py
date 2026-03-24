@@ -23,7 +23,7 @@ import requests
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 QS_API = "https://quickstatements.toolforge.org/api.php"
-MAX_LINES_PER_BATCH = 200
+MAX_LINES_PER_BATCH = None  # Submit all lines in each file
 
 ATOMIC_FILES = [
     "modern_shrine_ranking_qualifiers.txt",   # Phase 1: add P459 to existing P13723
@@ -33,18 +33,12 @@ ATOMIC_FILES = [
 ]
 
 
-def read_batch(filepath, max_lines=MAX_LINES_PER_BATCH):
-    """Read up to max_lines from a file, return as list of non-empty lines."""
+def read_batch(filepath):
+    """Read all lines from a file, return as list of non-empty lines."""
     if not os.path.exists(filepath):
         return []
     with open(filepath, "r", encoding="utf-8") as f:
-        lines = []
-        for i, line in enumerate(f):
-            if i >= max_lines:
-                break
-            stripped = line.strip()
-            if stripped:
-                lines.append(stripped)
+        lines = [line.strip() for line in f if line.strip()]
     return lines
 
 
