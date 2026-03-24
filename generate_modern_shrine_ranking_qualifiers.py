@@ -249,6 +249,50 @@ def fetch_claims_batch(item_ids, source_property):
     return all_claims
 
 
+HITEISHA_OUTPUT_FILE = "remove_shikinai_hiteisha.txt"
+
+
+def generate_hiteisha_removals():
+    """Generate QuickStatements to remove all P31=Q135026601 (Shikinai Hiteisha) statements."""
+    query = """
+    SELECT ?item WHERE {
+      ?item wdt:P31 wd:Q135026601 .
+    }
+    ORDER BY ?item
+    """
+
+    total_query = """
+    SELECT (COUNT(*) AS ?total) WHERE {
+      ?item wdt:P31 wd:Q135026601 .
+    }
+    """
+
+    print("\n=== Shikinai Hiteisha (Q135026601) removal ===")
+    print("Fetching items with P31=Q135026601...")
+    results = fetch_sparql(query)
+    remaining = len(results)
+    print(f"Found {remaining} items with P31=Shikinai Hiteisha to remove")
+
+    lines = []
+    for r in results:
+        item = qid(r["item"]["value"])
+        lines.append(f"-{item}|P31|Q135026601")
+
+    with open(HITEISHA_OUTPUT_FILE, "w", encoding="utf-8") as f:
+        for line in lines:
+            f.write(line + "\n")
+
+    print(f"Written {len(lines)} lines to {HITEISHA_OUTPUT_FILE}")
+
+    return {
+        "name": "Remove P31 Shikinai Hiteisha",
+        "description": "Remove all P31 (instance of) → Q135026601 (Shikinai Hiteisha) statements",
+        "remaining": remaining,
+        "output_file": HITEISHA_OUTPUT_FILE,
+        "lines": len(lines),
+    }
+
+
 def generate_property_edits():
     """Phase 0: Write property-level edits for P13723 itself."""
     print("\n=== Phase 2: P13723 property edits ===")
@@ -725,7 +769,32 @@ def generate_duplicates_section():
      <a href="https://www.wikidata.org/wiki/Q59282644">Q59282644</a> (Takagi Shrine)</p>"""
 
 
-def generate_html(p459_stats, migration_stats, prop_stats):
+def generate_hiteisha_html_section(stats):
+    """Generate HTML section for Shikinai Hiteisha removal."""
+    if not stats or stats["lines"] == 0:
+        return """
+  <h2>Remove P31 Shikinai Hiteisha (Q135026601)</h2>
+  <p>All <code>P31</code> &rarr; <code>Q135026601</code> (Shikinai Hiteisha) statements have been removed.</p>
+  <div class="stats"><strong>0 remaining</strong></div>"""
+
+    batch = read_first_n_lines(stats["output_file"])
+    batch_escaped = html_escape(batch)
+    shown = min(stats["lines"], MAX_LINES_PER_BATCH)
+
+    return f"""
+  <h2>Remove P31 Shikinai Hiteisha (Q135026601)</h2>
+  <p>Remove all <code>P31</code> (instance of) &rarr; <code>Q135026601</code>
+     (<a href="https://www.wikidata.org/wiki/Q135026601">Shikinai Hiteisha</a>) statements.
+     This class is being deprecated and should be removed from all items.</p>
+  <div class="stats">
+    <strong>{stats["remaining"]} items remaining</strong>
+  </div>
+  <p>{shown} of {stats["lines"]} total lines
+     &mdash; <a href="{stats["output_file"]}">Download all</a></p>
+  <textarea class="qs-box" rows="10" readonly onclick="this.select()">{batch_escaped}</textarea>"""
+
+
+def generate_html(p459_stats, migration_stats, prop_stats, hiteisha_stats=None):
     """Generate the site index.html with progress for all categories."""
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -743,6 +812,9 @@ def generate_html(p459_stats, migration_stats, prop_stats):
     # P958 section from separate generator
     p958_summary = load_p958_summary()
     p958_section = generate_p958_html_section(p958_summary)
+
+    # Shikinai Hiteisha removal section
+    hiteisha_section = generate_hiteisha_html_section(hiteisha_stats) if hiteisha_stats else ""
 
     # Duplicate properties section
     duplicates_section = generate_duplicates_section()
@@ -853,6 +925,8 @@ def generate_html(p459_stats, migration_stats, prop_stats):
 
   {p958_section}
 
+  {hiteisha_section}
+
   {duplicates_section}
 
   <hr>
@@ -865,7 +939,7 @@ def generate_html(p459_stats, migration_stats, prop_stats):
         f.write(html)
 
 
-def generate_daily_operations(p459_stats, prop_stats, migration_stats, p4656_stats):
+def generate_daily_operations(p459_stats, prop_stats, migration_stats, p4656_stats, hiteisha_stats=None):
     """Generate the daily operations page — a single combined box of what to run now.
 
     Priority order:
@@ -874,6 +948,7 @@ def generate_daily_operations(p459_stats, prop_stats, migration_stats, p4656_sta
     - P4656 references (always included when lines exist)
     - Phase 3 (migration adds + removes) after Phase 2 complete
     - P958 qualifiers always included
+    - Shikinai Hiteisha removals always included
     """
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -927,6 +1002,16 @@ def generate_daily_operations(p459_stats, prop_stats, migration_stats, p4656_sta
                     lines.append(stripped)
                     p958_count += 1
 
+    # Always include Shikinai Hiteisha removals
+    hiteisha_count = 0
+    if hiteisha_stats and os.path.exists(hiteisha_stats["output_file"]):
+        with open(hiteisha_stats["output_file"], "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped:
+                    lines.append(stripped)
+                    hiteisha_count += 1
+
     # Write combined file
     daily_file = "daily_operations.txt"
     with open(daily_file, "w", encoding="utf-8") as f:
@@ -973,7 +1058,8 @@ def generate_daily_operations(p459_stats, prop_stats, migration_stats, p4656_sta
     <strong>{len(lines)} total lines</strong> (showing first {shown})
     &mdash; <a href="daily_operations.txt">Download all</a><br>
     {"<em>Includes " + str(p4656_count) + " P4656 ja.wiki reference lines</em><br>" if p4656_count else ""}
-    {"<em>Includes " + str(p958_count) + " P958 qualifier lines</em>" if p958_count else ""}
+    {"<em>Includes " + str(p958_count) + " P958 qualifier lines</em><br>" if p958_count else ""}
+    {"<em>Includes " + str(hiteisha_count) + " Shikinai Hiteisha removal lines</em>" if hiteisha_count else ""}
   </div>
 
   <textarea class="qs-box" rows="30" readonly onclick="this.select()">{batch_escaped}</textarea>
@@ -996,6 +1082,9 @@ def main():
     # Phase 2: Property-level edits to P13723 (after modern qualifiers, before migrations)
     prop_stats = generate_property_edits()
 
+    # Remove P31=Q135026601 (Shikinai Hiteisha) statements
+    hiteisha_stats = generate_hiteisha_removals()
+
     # P4656: Add Japanese Wikipedia references to modern-qualified P13723 statements
     p4656_stats = generate_p4656_references()
 
@@ -1007,15 +1096,15 @@ def main():
         time.sleep(2)  # Be nice to SPARQL endpoint between categories
 
     # Build site
-    generate_html(p459_stats, migration_stats, prop_stats)
-    generate_daily_operations(p459_stats, prop_stats, migration_stats, p4656_stats)
+    generate_html(p459_stats, migration_stats, prop_stats, hiteisha_stats)
+    generate_daily_operations(p459_stats, prop_stats, migration_stats, p4656_stats, hiteisha_stats)
 
     # Copy all QuickStatements files into _site
     migration_files = []
     for m in migration_stats:
         migration_files.append(m["add_file"])
         migration_files.append(m["remove_file"])
-    all_files = [p459_stats["output_file"], p4656_stats["output_file"]] + migration_files + [prop_stats["output_file"]]
+    all_files = [p459_stats["output_file"], p4656_stats["output_file"], hiteisha_stats["output_file"]] + migration_files + [prop_stats["output_file"]]
     # Include P958 files if they exist
     for p958_file in ["p958_qualifiers.txt", "p958_manual_review.txt"]:
         if os.path.exists(p958_file):
@@ -1025,7 +1114,7 @@ def main():
             shutil.copy(fname, os.path.join("_site", fname))
 
     # Write summary JSON
-    summary = {"p459": p459_stats, "p4656": p4656_stats, "migrations": migration_stats, "property_edits": prop_stats}
+    summary = {"p459": p459_stats, "p4656": p4656_stats, "hiteisha": hiteisha_stats, "migrations": migration_stats, "property_edits": prop_stats}
     with open("_site/summary.json", "w") as f:
         json.dump(summary, f, indent=2)
 
