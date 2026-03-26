@@ -1,6 +1,6 @@
 # modern-quickstatements
 
-Automated QuickStatements generation for Wikidata shrine property e.
+Automated QuickStatements generation for Wikidata shrine property editing.
 
 ## Current: Modern Shrine Ranking Qualifiers
 
