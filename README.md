@@ -8,13 +8,6 @@ Adds `P459` (determination method or standard) → `Q712534` (modern system of r
 
 This is prep work for generalizing `P13723` to support multiple shrine ranking systems, where the qualifier distinguishes which system determined the rank.
 
-### Usage
-
-```bash
-python generate_modern_shrine_ranking_qualifiers.py
-```
-
-Outputs `modern_shrine_ranking_qualifiers.txt` — paste into [QuickStatements](https://quickstatements.toolforge.org/) to apply.
 
 ### Current output
 
